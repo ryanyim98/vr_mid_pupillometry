@@ -1,0 +1,310 @@
+---
+title: "A7_PPG"
+author: "Ryan Yan"
+date: "2023-04-18"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(dplyr)
+library(tidyverse)
+library(lme4)
+library(ggplot2)
+library(lmerTest)
+library(sjPlot)
+library(patchwork)
+library(zoo)
+library(chron)
+theme_set(theme_bw() + #set the theme 
+            theme(text = element_text(family = "Times",size = 12))) #set the default text size
+purpleOrange_palette6 = c("purple4","purple2","plum3","gold","orange","goldenrod")
+purpleOrange_palette2 = c("purple4","orange")
+```
+
+```{r}
+my.df <- read_csv("/Users/rh/Desktop/VRMID-analysis/data/per_second_data.csv")
+
+my.df$condition <- factor(my.df$condition, levels = c("large","receding","looming","small"))
+
+my.df$trial.type <- factor(my.df$trial.type, levels = c("-$5","-$1","-$0","+$0","+$1","+$5"))
+```
+
+#look at PPG and HR
+```{r}
+ggplot(my.df%>%
+         filter(Subject == "ay220916",
+                trial <= 5))+
+  geom_line(aes(x = Time, y = PPG_1), color = "red")+
+  geom_line(aes(x = Time, y = PPG_2), color = "blue")
+
+ggplot(my.df%>%
+         filter(Subject == "ay220916"))+
+  geom_line(aes(x = Time, y = HeartRate))
+```
+#look at HR per trial
+```{r}
+my.df <- my.df%>%
+  group_by(Subject)%>%
+  mutate(HeartRate_demean = as.numeric(scale(HeartRate)))%>%
+  ungroup()
+
+baseline <- my.df%>%
+  filter(Time_sec == 1)%>%
+  select(Subject, trial,HeartRate_demean)%>%
+  rename(HR_base = HeartRate_demean)
+
+my.df <- left_join(my.df,baseline,
+                   by = c("Subject","trial"))
+
+my.df <- my.df%>%
+  mutate(HeartRate_demean_baselineCorr = HeartRate_demean - HR_base)
+```
+
+```{r}
+ggplot(my.df%>% filter(Time_sec <= 20,
+                       probe == "anti"))+
+  stat_summary(aes(x = Time_sec, y = HeartRate_demean_baselineCorr,
+                   color = trial.type), 
+               geom = "pointrange")+
+  stat_summary(aes(x = Time_sec, y = HeartRate_demean_baselineCorr,
+                   color = trial.type), 
+               geom = "line")+
+  scale_color_manual(values = purpleOrange_palette6)+
+  annotate("rect", xmin =0.1, xmax = 4, ymin = -0.3, ymax = 0.3,
+           color = "lightseagreen", fill = NA)+
+  annotate("text", x = 2,y = 0.2, label = "anticipation",
+          color = "lightseagreen")+
+  annotate("rect", xmin =4.1, xmax = 6, ymin = -0.3, ymax = 0.3,
+          color = "lightskyblue1", fill = NA)+
+  annotate("text", x = 5,y = 0.2, label = "fixation",
+          color = "lightskyblue1")+
+  annotate("rect", xmin =14.1, xmax = 16, ymin = -0.3, ymax = 0.3,
+           color = "lightskyblue3", fill = NA)+
+  annotate("text", x = 15,y = 0.2, label = "target",
+          color = "lightskyblue3")+
+  annotate("rect", xmin = 16.1, xmax = 18, ymin = -0.3, ymax = 0.3,
+           color = "lightskyblue4", fill = NA)+
+  annotate("text", x = 17,y = 0.2, label = "outcome",
+          color = "lightskyblue4")+
+  labs(title = "anticipation probe",
+       x = "time (s)",
+       y = "z-scored heart rate (baseline corrected)")
+```
+
+
+```{r}
+ggplot(my.df%>% filter(Time_sec <= 20,
+                       probe == "out"))+
+  stat_summary(aes(x = Time_sec, y = HeartRate_demean_baselineCorr,
+                   color = trial.type), 
+               geom = "pointrange")+
+  stat_summary(aes(x = Time_sec, y = HeartRate_demean_baselineCorr,
+                   color = trial.type), 
+               geom = "line")+
+  scale_color_manual(values = purpleOrange_palette6)+
+  annotate("rect", xmin =0.1+1.5, xmax = 4+1.5, ymin = -0.5, ymax = 0.5,
+           alpha = .2, color = "lightseagreen", fill = NA)+
+  annotate("text", x = 2+1.5,y = 0.4, label = "anticipation",
+          color = "lightseagreen")+
+  annotate("rect", xmin =4.1+1.5, xmax = 6+1.5, ymin = -0.5, ymax = 0.5,
+           alpha = .2, color = "lightskyblue1", fill = NA)+
+  annotate("text", x = 5+1.5,y = 0.4, label = "fixation",
+          color = "lightskyblue1")+
+  annotate("rect", xmin = 6.1+1.5, xmax = 8+1.5, ymin = -0.5, ymax = 0.5,
+           alpha = .2, color = "lightskyblue3", fill = NA)+
+  annotate("text", x = 7+1.5,y = 0.4, label = "target",
+          color = "lightskyblue3")+
+  annotate("rect", xmin = 8.1+1.5, xmax = 10+1.5, ymin = -0.5, ymax = 0.5,
+           alpha = .2, color = "lightskyblue4", fill = NA)+
+  annotate("text", x = 9+1.5,y = 0.4, label = "outcome",
+          color = "lightskyblue4")+
+  labs(title = "Outcome probe",
+       x = "time (s)",
+       y = "z-scored heart rate")
+```
+
+```{r fig.width=9}
+ggplot(my.df%>% filter(Time_sec <= 20,
+                       probe == "out"),
+       aes(color = trial.type))+
+  stat_summary(aes(x = Time_sec, y = HeartRate_demean_baselineCorr,
+                  linetype = reaction_outcome, shape = reaction_outcome), 
+               geom = "pointrange")+
+  stat_summary(aes(x = Time_sec, y = HeartRate_demean_baselineCorr,
+                   linetype = reaction_outcome), 
+               geom = "line")+
+  facet_wrap(~trial.type)+
+  scale_color_manual(values = purpleOrange_palette6)+
+  annotate("rect", xmin =0.1+1.5, xmax = 4+1.5, ymin = -0.3, ymax = 0.3,
+           alpha = .2, color = "lightseagreen", fill = NA)+
+  annotate("rect", xmin =4.1+1.5, xmax = 6+1.5, ymin = -0.3, ymax = 0.3,
+           alpha = .2, color = "lightskyblue1", fill = NA)+
+  annotate("rect", xmin = 6.1+1.5, xmax = 8+1.5, ymin = -0.3, ymax = 0.3,
+           alpha = .2, color = "lightskyblue3", fill = NA)+
+  annotate("rect", xmin = 8.1+1.5, xmax = 10+1.5, ymin = -0.3, ymax = 0.3,
+           alpha = .2, color = "lightskyblue4", fill = NA)+
+  labs(title = "Outcome probe",
+       x = "time (s)",
+       y = "z-scored heart rate")
+```
+
+
+```{r}
+ggplot(my.df%>% filter(Time_sec <= 20))+
+  stat_summary(aes(x = Time_sec, y = HeartRate_demean_baselineCorr,
+                   color = trial.type), 
+               geom = "pointrange")+
+  stat_summary(aes(x = Time_sec, y = HeartRate_demean_baselineCorr,
+                   color = trial.type), 
+               geom = "line")+
+  scale_color_manual(values = purpleOrange_palette6)+
+  annotate("rect", xmin =0.1+1.5, xmax = 4+1.5, ymin = -0.2, ymax = 0.2,
+           alpha = .2, color = "lightseagreen", fill = NA)+
+  annotate("text", x = 2+1.5,y = 0.15, label = "anticipation",
+          color = "lightseagreen")+
+  annotate("rect", xmin =4.1+1.5, xmax = 6+1.5, ymin = -0.2, ymax = 0.2,
+           alpha = .2, color = "lightskyblue1", fill = NA)+
+  annotate("text", x = 5+1.5,y = 0.15, label = "fixation",
+          color = "lightskyblue1")+
+  labs(title = "Mean of all trials")
+
+ggplot(my.df%>% filter(Time_sec <= 20,
+                       trial.type %in% c("-$5","+$5")))+
+  stat_summary(aes(x = Time_sec, y = HeartRate_demean_baselineCorr,
+                   color = trial.type, shape = reaction_outcome), 
+               geom = "pointrange")+
+  stat_summary(aes(x = Time_sec, y = HeartRate_demean_baselineCorr,
+                   color = trial.type, linetype = reaction_outcome), 
+               geom = "line")+
+  scale_color_manual(values = c(purpleOrange_palette6[1],purpleOrange_palette6[6]))+
+  annotate("rect", xmin =0.1+1.5, xmax = 4+1.5, ymin = -0.2, ymax = 0.2,
+           alpha = .2, color = "lightseagreen", fill = NA)+
+  annotate("text", x = 2+1.5,y = 0.15, label = "anticipation",
+          color = "lightseagreen")+
+  annotate("rect", xmin =4.1+1.5, xmax = 6+1.5, ymin = -0.2, ymax = 0.2,
+           alpha = .2, color = "lightskyblue1", fill = NA)+
+  annotate("text", x = 5+1.5,y = 0.15, label = "fixation",
+          color = "lightskyblue1")+
+  labs(title = "Mean of all trials")
+```
+
+#look at HRV per trial
+```{r}
+my.df <- my.df%>%
+  group_by(Subject)%>%
+  mutate(HeartRateVar_rmssd_demean = as.numeric(scale(HeartRateVar_rmssd)),
+         HeartRateVar_sdnn_demean = as.numeric(scale(HeartRateVar_sdnn)))%>%
+  ungroup()
+```
+
+```{r fig.width=9, fig.height=4}
+p1 <- ggplot(my.df%>% filter(as.numeric(Time_sec) <= 20,
+                       probe == "anti"))+
+  stat_summary(aes(x = Time_sec, y = HeartRateVar_rmssd_demean,
+                   color = trial.type), 
+               geom = "pointrange")+
+  stat_summary(aes(x = Time_sec, y = HeartRateVar_rmssd_demean,
+                   color = trial.type), 
+               geom = "line")+
+  scale_color_manual(values = purpleOrange_palette6)+
+  annotate("rect", xmin =0.1, xmax = 4, ymin = -0.3, ymax = 0.3,
+           color = "lightseagreen", fill = NA)+
+  annotate("text", x = 1,y = 0.2, label = "anticipation",
+          color = "lightseagreen")+
+  annotate("rect", xmin =4.1, xmax = 6, ymin = -0.3, ymax = 0.3,
+          color = "lightskyblue1", fill = NA)+
+  annotate("text", x = 5,y = 0.2, label = "fixation",
+          color = "lightskyblue1")+
+  annotate("rect", xmin =14.1, xmax = 16, ymin = -0.3, ymax = 0.3,
+           color = "lightskyblue3", fill = NA)+
+  annotate("text", x = 15,y = 0.2, label = "target",
+          color = "lightskyblue3")+
+  annotate("rect", xmin = 16.1, xmax = 18, ymin = -0.3, ymax = 0.3,
+           color = "lightskyblue4", fill = NA)+
+  annotate("text", x = 17,y = 0.2, label = "outcome",
+          color = "lightskyblue4")+
+  labs(title = "anticipation probe",
+       x = "time (s)",
+       y = "z-scored HRV-RMSDD")
+
+p2 <- ggplot(my.df%>% filter(as.numeric(Time_sec) <= 20,
+                       probe == "anti"))+
+  stat_summary(aes(x = Time_sec, y = HeartRateVar_sdnn_demean,
+                   color = trial.type), 
+               geom = "pointrange")+
+  stat_summary(aes(x = Time_sec, y = HeartRateVar_sdnn_demean,
+                   color = trial.type), 
+               geom = "line")+
+  scale_color_manual(values = purpleOrange_palette6)+
+  annotate("rect", xmin =0.1, xmax = 4, ymin = -0.3, ymax = 0.3,
+           color = "lightseagreen", fill = NA)+
+  annotate("text", x = 1,y = 0.2, label = "anticipation",
+          color = "lightseagreen")+
+  annotate("rect", xmin =4.1, xmax = 6, ymin = -0.3, ymax = 0.3,
+          color = "lightskyblue1", fill = NA)+
+  annotate("text", x = 5,y = 0.2, label = "fixation",
+          color = "lightskyblue1")+
+  annotate("rect", xmin =14.1, xmax = 16, ymin = -0.3, ymax = 0.3,
+           color = "lightskyblue3", fill = NA)+
+  annotate("text", x = 15,y = 0.2, label = "target",
+          color = "lightskyblue3")+
+  annotate("rect", xmin = 16.1, xmax = 18, ymin = -0.3, ymax = 0.3,
+           color = "lightskyblue4", fill = NA)+
+  annotate("text", x = 17,y = 0.2, label = "outcome",
+          color = "lightskyblue4")+
+  labs(title = "anticipation probe",
+       x = "time (s)",
+       y = "z-scored HRV-SNDD")
+
+p1+p2
+```
+
+```{r fig.width= 9}
+ggplot(my.df%>% filter(Time_sec <= 20,
+                       probe == "anti"),
+       aes(color = trial.type))+
+  stat_summary(aes(x = Time_sec, y = HeartRateVar_rmssd_demean,
+                  linetype = reaction_outcome, shape = reaction_outcome), 
+               geom = "pointrange")+
+  stat_summary(aes(x = Time_sec, y = HeartRateVar_rmssd_demean,
+                   linetype = reaction_outcome), 
+               geom = "line")+
+  facet_wrap(~trial.type)+
+  scale_color_manual(values = purpleOrange_palette6)+
+  annotate("rect", xmin =0.1, xmax = 4, ymin = -0.3, ymax = 0.3,
+           color = "lightseagreen", fill = NA)+
+  annotate("rect", xmin =4.1, xmax = 6, ymin = -0.3, ymax = 0.3,
+          color = "lightskyblue1", fill = NA)+
+  annotate("rect", xmin =14.1, xmax = 16, ymin = -0.3, ymax = 0.3,
+           color = "lightskyblue3", fill = NA)+
+  annotate("rect", xmin = 16.1, xmax = 18, ymin = -0.3, ymax = 0.3,
+           color = "lightskyblue4", fill = NA)+
+  labs(title = "anticipation probe",
+       x = "time (s)",
+       y = "z-scored HRV-RMSDD")
+
+ggplot(my.df%>% filter(Time_sec <= 20,
+                       probe == "anti"),
+       aes(color = trial.type))+
+  stat_summary(aes(x = Time_sec, y = HeartRateVar_sdnn_demean,
+                  linetype = reaction_outcome, shape = reaction_outcome), 
+               geom = "pointrange")+
+  stat_summary(aes(x = Time_sec, y = HeartRateVar_sdnn_demean,
+                   linetype = reaction_outcome), 
+               geom = "line")+
+  facet_wrap(~trial.type)+
+  scale_color_manual(values = purpleOrange_palette6)+
+  annotate("rect", xmin =0.1, xmax = 4, ymin = -0.3, ymax = 0.3,
+           color = "lightseagreen", fill = NA)+
+  annotate("rect", xmin =4.1, xmax = 6, ymin = -0.3, ymax = 0.3,
+          color = "lightskyblue1", fill = NA)+
+  annotate("rect", xmin =14.1, xmax = 16, ymin = -0.3, ymax = 0.3,
+           color = "lightskyblue3", fill = NA)+
+  annotate("rect", xmin = 16.1, xmax = 18, ymin = -0.3, ymax = 0.3,
+           color = "lightskyblue4", fill = NA)+
+  labs(title = "anticipation probe",
+       x = "time (s)",
+       y = "z-scored HRV-SDNN")
+```
+

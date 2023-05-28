@@ -1,0 +1,720 @@
+---
+title: "axis_rotation"
+author: "Ryan Yan"
+date: "2023-04-07"
+output: html_document
+---
+
+```{r}
+source(here::here("load_libraries.R"))
+theme_set(theme_bw() + #set the theme 
+            theme(text = element_text(family = "Helvetica",size = 12))) #set the default text size
+```
+
+
+
+```{r set up}
+theme_set(theme_bw() + #set the theme 
+            theme(text = element_text(family = "Times",size = 12))) #set the default text size
+purpleOrange_palette6 = c("purple4","purple2","plum3","khaki","gold","goldenrod4")
+purpleOrange_palette2 = c("purple4","gold")
+```
+
+```{r}
+data_lm_anti <- read_csv("/Users/rh/Desktop/VRMID-analysis/data/data_lm_anticipation.csv")%>%
+  dplyr::select(-PosA_scaled, -NegA_scaled)
+
+
+data_lm_outcome <- read_csv("/Users/rh/Desktop/VRMID-analysis/data/data_lm_outcome.csv")%>%
+  dplyr::select(-PosA_scaled, -NegA_scaled)%>%
+  mutate(reaction_outcome = factor(reaction_outcome, levels = c("Hit","Miss")))
+
+```
+
+# Anticipation
+## canonical axis: valence and arousal
+```{r warning = F, message = F}
+data_lm_anti$trial_type <- factor(data_lm_anti$trial_type, levels = c("-$5","-$1","-$0","+$0","+$1","+$5"))
+
+lme1 <- lmer(scale(arousal_scaled) ~ scale(mean_pupil_nobc_ant) + (1|Subject) + (1|condition),
+              data_lm_anti)
+summary(lme1)
+
+summary(lmer(mean_pupil_nobc_ant ~ arousal_scaled + valence_scaled + (1|Subject) + (1|condition),
+              data_lm_anti))
+
+p1 <- plot_model(lme1, type = "pred", terms = c("mean_pupil_nobc_ant"),
+           show.data = T)+
+  labs(title = "Anticipation arousal (collapsing cue types)")+
+  xlim(-4,4)
+
+lme2 <- lmer(valence_scaled ~ mean_pupil_nobc_ant + (1|Subject) + (1|condition),
+              data_lm_anti)
+summary(lme2)
+
+p2 <- plot_model(lme2, type = "pred", terms = c("mean_pupil_nobc_ant"),
+           show.data = T)+
+  labs(title = "Anticipation valence (collapsing cue types)")+
+  xlim(-4,4)
+
+(p1+p2)
+
+p1a <- plot_model(lme1, type = "pred", terms = c("mean_pupil_nobc_ant"),
+           show.data = F)+
+  labs(title = "Anticipation arousal")+
+  scale_color_manual(values = purpleOrange_palette6)+
+  scale_fill_manual(values = purpleOrange_palette6)+
+  xlim(-4,4)+
+plot_model(lme2, type = "pred", terms = c("mean_pupil_nobc_ant"),
+           show.data = F)+
+  labs(title = "Anticipation valence")+
+  scale_color_manual(values = purpleOrange_palette6)+
+  scale_fill_manual(values = purpleOrange_palette6)+
+  xlim(-4,4)
+```
+
+# axis rotation
+## demonstration
+```{r}
+nbins = 4
+angles = seq(0,pi/2, by = pi/(2*nbins))
+angles = data.frame(angle1d = angles*180/pi,
+                    angle1r = angles,
+                    sin1 = sin(angles),
+                    cos1 = cos(angles))
+
+angles <- angles%>%
+  mutate(angle2d = angle1d + 90,
+         angle2r = angle1r + pi/2,
+         sin2 = sin(angle2r),
+         cos2 = cos(angle2r))
+
+ggplot(angles)+
+  geom_segment(aes(x = 0, y = 0, xend = cos1, yend = sin1, 
+                   color = as.factor(angle1d)),
+               size = 2, arrow = arrow(length = unit(0.1, "npc")))+
+  geom_segment(aes(x = 0, y = 0, xend = cos2, yend = sin2, 
+                   color = as.factor(angle1d)),
+               size = 2, arrow = arrow(length = unit(0.1, "npc")))+
+  geom_text(aes(label = "axis 1", x = cos1-0.1, y = sin1-0.2))+
+  geom_text(aes(label = "axis 2", x = cos2+0.1, y = sin2-0.2))+
+  facet_wrap(~angle1d)+
+  scale_color_bluebrown_d()+
+  xlim(-1,1)+
+  ylim(-1,1)+
+  labs(x = "valence", 
+       y = "arousal",
+       color = "angle (degree)")
+```
+
+```{r message = F, warning=F}
+nbins = 360
+angles = seq(0,pi/2, by = pi/(2*nbins))
+angles = data.frame(angle1d = angles*180/pi,
+                    angle1r = angles,
+                    sin1 = sin(angles),
+                    cos1 = cos(angles))
+
+angles <- angles%>%
+  mutate(angle2d = angle1d + 90,
+         angle2r = angle1r + pi/2,
+         sin2 = sin(angle2r),
+         cos2 = cos(angle2r))
+
+lmer_out1 <- {}
+
+for (i in 1:nrow(angles)){
+  angle_info = angles[i,]
+  data_lm_anti_temp <- data_lm_anti%>%
+    mutate(axis1 = valence_scaled * angle_info$cos1 + arousal_scaled * angle_info$sin1,
+           axis2 = valence_scaled * angle_info$cos2 + arousal_scaled * angle_info$sin2)
+  sum_temp1 <- summary(lmer(scale(axis1) ~ scale(mean_pupil_nobc_ant) + (1|Subject) + (1|condition),
+              data_lm_anti_temp))
+  sum_temp2 <- summary(lmer(scale(axis2) ~ scale(mean_pupil_nobc_ant) + (1|Subject) + (1|condition),
+              data_lm_anti_temp))
+  lmer_out1 <- rbind(lmer_out1, sum_temp1$coefficients[2,],sum_temp2$coefficients[2,])
+}
+
+lmer_out1 <- as.data.frame(lmer_out1)
+lmer_out1$axis = rep(c("axis1","axis2"),nrow(angles))
+  
+lmer_out1[seq(1,nrow(angles)*2,by = 2),"angle"] = angles$angle1d
+lmer_out1[seq(2,nrow(angles)*2,by = 2),"angle"] = angles$angle2d
+
+lmer_out1$p_val <- (lmer_out1$`Pr(>|t|)` < 0.001)
+
+pb1 <- ggplot(lmer_out1, aes(x = angle,
+                     y = Estimate))+
+  geom_point(aes(color = p_val,
+                 group = axis))+
+  facet_wrap(~axis)+
+  geom_hline(yintercept = 0)+
+  labs(title = "Affect dimension ~ anticipatory pupil dilation",
+       subtitle = "angle is between the axis and valence",
+       color = "p < .001")+
+  scale_color_manual(values = c("grey","maroon"))+
+  geom_vline(xintercept = 90, linetype = "dashed")
+
+a1 <- lmer_out1[which.max(abs(lmer_out1$Estimate)),]
+```
+
+<!-- ## is this purely because of target motions? -->
+
+<!-- ```{r} -->
+<!-- lmer_out <- {} -->
+
+<!-- for (i in 1:nrow(angles)){ -->
+<!--   angle_info = angles[i,] -->
+<!--   data_lm_anti_temp <- data_lm_anti%>% -->
+<!--     filter(condition == "large")%>% -->
+<!--     mutate(axis1 = valence_scaled * angle_info$cos1 + arousal_scaled * angle_info$sin1, -->
+<!--            axis2 = valence_scaled * angle_info$cos2 + arousal_scaled * angle_info$sin2) -->
+<!--   sum_temp1 <- summary(lmer(scale(axis1) ~ scale(mean_pupil_nobc) + (1|Subject), -->
+<!--               data_lm_anti_temp)) -->
+<!--   sum_temp2 <- summary(lmer(scale(axis2) ~ scale(mean_pupil_nobc) + (1|Subject), -->
+<!--               data_lm_anti_temp)) -->
+<!--   lmer_out <- rbind(lmer_out, sum_temp1$coefficients[2,],sum_temp2$coefficients[2,]) -->
+<!-- } -->
+
+<!-- lmer_out <- as.data.frame(lmer_out) -->
+<!-- lmer_out$axis = rep(c("axis1","axis2"),nrow(angles)) -->
+
+<!-- lmer_out[seq(1,nrow(angles)*2,by = 2),"angle"] = angles$angle1d -->
+<!-- lmer_out[seq(2,nrow(angles)*2,by = 2),"angle"] = angles$angle2d -->
+
+<!-- lmer_out$p_val <- (lmer_out$`Pr(>|t|)` < 0.05) -->
+
+<!-- ggplot(lmer_out, aes(x = angle, -->
+<!--                      y = Estimate))+ -->
+<!--   geom_line(aes(group = axis, -->
+<!--                 linetype = axis))+ -->
+<!--   geom_point(aes(color = p_val, -->
+<!--                  group = axis))+ -->
+<!--   facet_wrap(~axis)+ -->
+<!--   geom_hline(yintercept = 0)+ -->
+<!--   labs(title = "axis correlation with pupil dilation during anticipation (large condition)", -->
+<!--        subtitle = "angle is between axis and valence")+ -->
+<!--   scale_color_manual(values = c("grey","maroon")) -->
+<!-- ``` -->
+
+# outcome
+
+```{r}
+lme5 <- lmer(arousal_scaled ~ mean_pupil_nobc_out * reaction_outcome + (1|Subject) + (1|condition),
+              data_lm_outcome)
+summary(lme5)
+p5 <- plot_model(lme5, type = "pred", terms = c("mean_pupil_nobc_out","reaction_outcome"),
+           show.data =F)+
+  labs(title = "Outcome Arous (collapsing cue types)",
+       color = "Outcome")
+
+lme5b <- lmer(mean_pupil_nobc_out ~ arousal_scaled * reaction_outcome + valence_scaled * reaction_outcome + (1|Subject) + (1|condition),data_lm_outcome)
+summary(lme5b)
+plot_model(lme5b, type = "pred", terms = c("arousal_scaled","reaction_outcome"),
+           show.data = T)+
+plot_model(lme5b, type = "pred", terms = c("valence_scaled","reaction_outcome"),
+           show.data = T)
+
+lme6 <- lmer(valence_scaled ~ mean_pupil_nobc_out * reaction_outcome + (1|Subject) + (1|condition),
+              data_lm_outcome)
+p6 <- plot_model(lme6, type = "pred", terms = c("mean_pupil_nobc_out","reaction_outcome"),
+           show.data = F)+
+  labs(title = "Outcome valence (collapsing cue types)",
+       color = "Outcome")
+
+p1a / (p5+p6)
+```
+```{r}
+data_lm_outcome$reaction_outcome <- relevel(data_lm_outcome$reaction_outcome, ref = "Hit")
+
+lmer_out2 <- {}
+
+for (i in 1:nrow(angles)){
+  angle_info = angles[i,]
+  data_lm_out_temp <- data_lm_outcome%>%
+    mutate(axis1 = valence_scaled * angle_info$cos1 + arousal_scaled * angle_info$sin1,
+           axis2 = valence_scaled * angle_info$cos2 + arousal_scaled * angle_info$sin2)
+  sum_temp1 <- summary(lmer(scale(axis1) ~ scale(mean_pupil_nobc_out) * reaction_outcome + (1|Subject) + (1|condition),
+              data_lm_out_temp))
+  sum_temp2 <- summary(lmer(scale(axis2) ~ scale(mean_pupil_nobc_out) * reaction_outcome + (1|Subject) + (1|condition),
+              data_lm_out_temp))
+  lmer_out2 <- rbind(lmer_out2, sum_temp1$coefficients[2,],sum_temp2$coefficients[2,])
+}
+
+lmer_out2 <- as.data.frame(lmer_out2)
+lmer_out2$axis = rep(c("axis1","axis2"),nrow(angles))
+  
+lmer_out2[seq(1,nrow(angles)*2,by = 2),"angle"] = angles$angle1d
+lmer_out2[seq(2,nrow(angles)*2,by = 2),"angle"] = angles$angle2d
+
+lmer_out2$p_val <- (lmer_out2$`Pr(>|t|)` < 0.001)
+
+pb2 <- ggplot(lmer_out2, aes(x = angle,
+                     y = Estimate))+
+  geom_point(aes(color = p_val))+
+  facet_wrap(~axis)+
+  geom_hline(yintercept = 0)+
+  labs(title = "Affect dimension ~ outcome pupil dilation upon hits",
+       subtitle = "angle is between the axis and valence",
+       color = "p < .001")+
+  scale_color_manual(values = c("grey","maroon"))+
+  geom_vline(xintercept = 90, linetype = "dashed")
+
+a2 <- lmer_out2[which.max(abs(lmer_out2$Estimate)),]
+```
+
+```{r}
+data_lm_outcome$reaction_outcome <- relevel(data_lm_outcome$reaction_outcome, ref = "Miss")
+
+lmer_out3 <- {}
+
+for (i in 1:nrow(angles)){
+  angle_info = angles[i,]
+  data_lm_out_temp <- data_lm_outcome%>%
+    mutate(axis1 = valence_scaled * angle_info$cos1 + arousal_scaled * angle_info$sin1,
+           axis2 = valence_scaled * angle_info$cos2 + arousal_scaled * angle_info$sin2)
+  sum_temp1 <- summary(lmer(scale(axis1) ~ scale(mean_pupil_nobc_out) * reaction_outcome + (1|Subject) + (1|condition),
+              data_lm_out_temp))
+  sum_temp2 <- summary(lmer(scale(axis2) ~ scale(mean_pupil_nobc_out) * reaction_outcome + (1|Subject) + (1|condition),
+              data_lm_out_temp))
+  lmer_out3 <- rbind(lmer_out3, sum_temp1$coefficients[2,],sum_temp2$coefficients[2,])
+}
+
+lmer_out3 <- as.data.frame(lmer_out3)
+lmer_out3$axis = rep(c("axis1","axis2"),nrow(angles))
+  
+lmer_out3[seq(1,nrow(angles)*2,by = 2),"angle"] = angles$angle1d
+lmer_out3[seq(2,nrow(angles)*2,by = 2),"angle"] = angles$angle2d
+
+lmer_out3$p_val <- (lmer_out3$`Pr(>|t|)` < 0.001)
+
+pb3 <- ggplot(lmer_out3, aes(x = angle,
+                     y = Estimate))+
+  geom_point(aes(color = p_val,
+                 group = axis))+
+  facet_wrap(~axis)+
+  geom_hline(yintercept = 0)+
+  labs(title = "Affect dimension ~ outcome pupil dilation upon misses",
+       subtitle = "angle is between the axis and valence",
+       color = "p < .001")+
+  scale_color_manual(values = c("grey","maroon"))+
+  geom_vline(xintercept = 90, linetype = "dashed")
+
+a3 <- lmer_out3[which.max(abs(lmer_out3$Estimate)),]
+```
+
+<!-- ```{r} -->
+<!-- data_lm_outcome_ref$reaction_outcome <- relevel(data_lm_outcome_ref$reaction_outcome, ref = "Miss") -->
+
+<!-- lmer_out3 <- {} -->
+
+<!-- for (i in 1:nrow(angles)){ -->
+<!--   angle_info = angles[i,] -->
+<!--   data_lm_out_temp <- data_lm_outcome_ref%>% -->
+<!--     mutate(axis1 = valence_scaled * angle_info$cos1 + arousal_scaled * angle_info$sin1, -->
+<!--            axis2 = valence_scaled * angle_info$cos2 + arousal_scaled * angle_info$sin2) -->
+<!--   sum_temp1 <- summary(lmer(axis1 ~ mean_pupil_nobc * reaction_outcome + (1|Subject) + (1|condition), -->
+<!--               data_lm_out_temp)) -->
+<!--   sum_temp2 <- summary(lmer(axis2 ~ mean_pupil_nobc * reaction_outcome + (1|Subject) + (1|condition), -->
+<!--               data_lm_out_temp)) -->
+<!--   lmer_out3 <- rbind(lmer_out3, sum_temp1$coefficients[2,],sum_temp2$coefficients[2,]) -->
+<!-- } -->
+
+<!-- lmer_out3 <- as.data.frame(lmer_out3) -->
+<!-- lmer_out3$axis = rep(c("axis1","axis2"),nrow(angles)) -->
+
+<!-- lmer_out3[seq(1,nrow(angles)*2,by = 2),"angle"] = angles$angle1d -->
+<!-- lmer_out3[seq(2,nrow(angles)*2,by = 2),"angle"] = angles$angle2d -->
+
+<!-- lmer_out3$p_val <- (lmer_out3$`Pr(>|t|)` < 0.05) -->
+
+<!-- ggplot(lmer_out3, aes(x = angle, -->
+<!--                      y = Estimate))+ -->
+<!--   geom_line(aes(group = axis, -->
+<!--                 linetype = axis))+ -->
+<!--   geom_point(aes(color = p_val, -->
+<!--                  group = axis))+ -->
+<!--   facet_wrap(~axis)+ -->
+<!--   geom_hline(yintercept = 0)+ -->
+<!--   labs(title = "Miss during reference period", -->
+<!--        subtitle = "angle is between axis and valence")+ -->
+<!--   scale_color_manual(values = c("grey","maroon")) -->
+<!-- ``` -->
+
+```{r}
+df_axes <- rbind(a1,a2,a3)
+df_axes$condition <- c("anti","out-hit","out-miss")
+
+df_axes <- df_axes%>%
+  mutate(rad = angle/180 *pi,
+         cos = cos(rad),
+         sin = sin(rad))
+pb4 <- ggplot(df_axes%>%
+         mutate(cos = cos * abs(Estimate),
+                sin = sin * abs(Estimate)))+
+  geom_segment(aes(x = -0.5, y = 0,
+                   xend = 0.5, yend = 0),
+               size = 0.5, arrow = arrow(length = unit(0.03, "npc")),
+               color = "black")+
+  geom_segment(aes(x = 0, y = -0.5,
+                   xend = 0, yend = 0.5),
+               size = 0.5, arrow = arrow(length = unit(0.03, "npc")),
+               color = "black")+
+    geom_segment(aes(x = -0.5, y = -0.5,
+                   xend = 0.5, yend = 0.5),
+               size = 0.5, linetype = "dashed",
+               color = "black")+
+    geom_segment(aes(x = -0.5, y = 0.5,
+                   xend = 0.5, yend = -0.5),
+               size = 0.5, linetype = "dashed",
+               color = "black")+
+  geom_segment(aes(x = 0,y = 0,
+                   xend = cos, yend = sin,
+                   color = condition),
+               size = 2, arrow = arrow(length = unit(0.03, "npc")))+
+  geom_text(aes(x = cos * 1.2, y = sin * 1.2, color = condition, label = round(Estimate,2)),
+            size = 5,check_overlap = F)+
+  scale_color_manual(values = c("orange","turquoise3","chocolate4"))+
+  xlim(-0.5,0.5)+
+  ylim(-0.5,0.5)+
+  labs(x = "valence",
+       y = "arousal",
+       title = "Data-driven analysis (full signal)",
+       subtitle = "Standardised regression coefficients")
+```
+
+```{r}
+theme_set(theme_bw() + #set the theme 
+            theme(text = element_text(family = "Helvetica",size = 10)))
+
+pb1+pb2+pb3+pb4 +
+  plot_layout(nrow = 2, ncol = 2)+
+  plot_annotation(tag_levels = "A")
+```
+
+# how does bc info improve association?
+# how does bc info improve association?
+```{r}
+rSquared <- c()
+
+#anticipation
+
+temp1 <- lmer(scale(arousal_scaled) ~ 
+                              scale(mean_pupil_nobc_ant) + (1|Subject) + (1|condition),
+                            data_lm_anti)
+temp2 <- lmer(scale(arousal_scaled) ~
+                              scale(mean_pupil_nobc_ant) + (1|Subject) + (1|condition),
+              data_lm_anti)
+plot_model(temp1,
+                     type = "pred",
+                     terms = c("mean_pupil_nobc_ant"),
+                     show.data = TRUE)
+  rSquared <- rbind(rSquared,cbind(MuMIn::r.squaredGLMM(temp1)[2],MuMIn::r.squaredGLMM(temp2)[2]))
+  
+#hit, miss
+for (i in 2:3){
+  if (i == 2){
+    data_lm_out_temp <- data_lm_outcome%>%
+      filter(reaction_outcome == "Hit")
+  }else if (i == 3){
+    data_lm_out_temp <- data_lm_outcome%>%
+      filter(reaction_outcome == "Miss")
+  }
+  
+    temp1 <- lmer(scale(arousal_scaled) ~ 
+                              scale(mean_pupil_nobc_out) + (1|Subject) + (1|condition),
+                            data_lm_out_temp)
+    temp2 <- lmer(scale(arousal_scaled) ~
+                              scale(mean_pupil_nobc_out) + (1|Subject) + (1|condition),
+              data_lm_out_temp)
+    # plot_model(temp1,
+    #                  type = "pred",
+    #                  terms = c("mean_pupil_nobc","reaction_outcome"),
+    #                  show.data = TRUE)+
+    #   scale_color_manual(values = c("red","white"))+
+    #   scale_fill_manual(values = c("red","white"))
+  rSquared <- rbind(rSquared,cbind(MuMIn::r.squaredGLMM(temp1)[2],MuMIn::r.squaredGLMM(temp2)[2]))
+}
+  
+rSquared <- as.data.frame(rSquared)
+names(rSquared) <- c("nobc","bc")
+rownames(rSquared) <- c("anti","hit","miss")
+rSquared
+
+MuMIn::r.squaredGLMM(lmer(scale(arousal_scaled) ~
+                              scale(mean_pupil_nobc_out) * reaction_outcome + (1|Subject) + (1|condition),
+              data_lm_outcome))
+```
+
+```{r}
+rSquared <- c()
+
+#anticipation
+data_lm_anti_temp <- data_lm_anti%>%
+    mutate(axis_readout = valence_scaled * df_axes$cos[1] + arousal_scaled * df_axes$sin[1])%>%
+  filter(!is.na(mean_pupil_nobc_ant),!is.na(mean_pupil_bc_ant))
+ 
+temp1a <- lmer(scale(axis_readout) ~ 
+                              scale(mean_pupil_nobc_ant) + (1|Subject) + (1|condition),
+                            data_lm_anti_temp)
+    temp2a <- lmer(scale(axis_readout) ~
+                              scale(mean_pupil_bc_ant) + (1|Subject) + (1|condition),
+              data_lm_anti_temp)
+    
+  rSquared <- rbind(rSquared,cbind(MuMIn::r.squaredGLMM(temp1a)[2],MuMIn::r.squaredGLMM(temp2a)[2]))
+  
+#hit, miss
+  data_lm_out_temp <- data_lm_outcome%>%
+    mutate(axis_readout = valence_scaled * df_axes$cos[i] + arousal_scaled * df_axes$sin[i])%>%
+  filter(!is.na(mean_pupil_nobc_out),!is.na(mean_pupil_bc_out))
+  
+    temp1b <- lmer(scale(axis_readout) ~ 
+                              scale(mean_pupil_nobc_out) + (1|Subject) + (1|condition),
+                            data_lm_out_temp)
+    temp2b <- lmer(scale(axis_readout) ~
+                              scale(mean_pupil_bc_out) + (1|Subject) + (1|condition),
+              data_lm_out_temp)
+    # plot_model(temp1,
+    #                  type = "pred",
+    #                  terms = c("mean_pupil_nobc","reaction_outcome"),
+    #                  show.data = TRUE)+
+    #   scale_color_manual(values = c("red","white"))+
+    #   scale_fill_manual(values = c("red","white"))
+  rSquared <- rbind(rSquared,cbind(MuMIn::r.squaredGLMM(temp1b)[2],MuMIn::r.squaredGLMM(temp2b)[2]))
+  
+rSquared <- as.data.frame(rSquared)
+names(rSquared) <- c("nobc","bc")
+rownames(rSquared) <- c("anti","out")
+rSquared
+rSquared$nobc - rSquared$bc
+
+anova(temp1a,temp2a)
+anova(temp1b,temp2b)
+```
+
+# gain and loss domain separately
+```{r}
+data_lm_anti <- data_lm_anti%>%
+  mutate(gain_or_loss = ifelse(trial_type %in% c("+$0","+$1","+$5"),
+                               "gain",
+                               "loss"))
+
+data_lm_outcome <- data_lm_outcome%>%
+  mutate(gain_or_loss = ifelse(trial_type %in% c("+$0","+$1","+$5"),
+                               "gain",
+                               "loss"))
+```
+
+```{r}
+nbins = 360
+angles = seq(0,pi/2, by = pi/(2*nbins))
+angles = data.frame(angle1d = angles*180/pi,
+                    angle1r = angles,
+                    sin1 = sin(angles),
+                    cos1 = cos(angles))
+
+angles <- angles%>%
+  mutate(angle2d = angle1d + 90,
+         angle2r = angle1r + pi/2,
+         sin2 = sin(angle2r),
+         cos2 = cos(angle2r))
+
+lmer_out1gain <- {}
+lmer_out1loss <- {}
+
+for (i in 1:nrow(angles)){
+  angle_info = angles[i,]
+  data_lm_anti_temp <- data_lm_anti%>%
+    mutate(axis1 = valence_scaled * angle_info$cos1 + arousal_scaled * angle_info$sin1,
+           axis2 = valence_scaled * angle_info$cos2 + arousal_scaled * angle_info$sin2)
+  
+  data_lm_anti_temp$gain_or_loss <- factor(data_lm_anti_temp$gain_or_loss, levels = c("gain","loss"))
+  sum_temp1 <- summary(lmer(scale(axis1) ~ scale(mean_pupil_bc_ant) * gain_or_loss + (1|Subject) + (1|condition),
+              data_lm_anti_temp))
+  sum_temp2 <- summary(lmer(scale(axis2) ~ scale(mean_pupil_bc_ant) * gain_or_loss + (1|Subject) + (1|condition),
+              data_lm_anti_temp))
+  lmer_out1gain <- rbind(lmer_out1gain, sum_temp1$coefficients[2,],sum_temp2$coefficients[2,])
+  
+  data_lm_anti_temp$gain_or_loss <- factor(data_lm_anti_temp$gain_or_loss, levels = c("loss","gain"))
+  sum_temp1 <- summary(lmer(scale(axis1) ~ scale(mean_pupil_bc_ant) * gain_or_loss + (1|Subject) + (1|condition),
+              data_lm_anti_temp))
+  sum_temp2 <- summary(lmer(scale(axis2) ~ scale(mean_pupil_bc_ant) * gain_or_loss + (1|Subject) + (1|condition),
+              data_lm_anti_temp))
+  lmer_out1loss <- rbind(lmer_out1loss, sum_temp1$coefficients[2,],sum_temp2$coefficients[2,])
+}
+
+lmer_out1 <- as.data.frame(rbind(lmer_out1gain,lmer_out1loss))
+lmer_out1$axis = rep(c("axis1","axis2"),nrow(angles)*2)
+lmer_out1$gain_or_loss = c(rep("gain",nrow(angles)*2),rep("loss",nrow(angles)*2))
+
+lmer_out1[seq(1,nrow(angles)*4,by = 2),"angle"] = angles$angle1d
+lmer_out1[seq(2,nrow(angles)*4,by = 2),"angle"] = angles$angle2d
+
+lmer_out1$p_val <- (lmer_out1$`Pr(>|t|)` < 0.05)
+
+ggplot(lmer_out1, aes(x = angle,
+                     y = Estimate))+
+  geom_point(aes(alpha = p_val,
+                 color = gain_or_loss,))+
+  facet_wrap(~axis)+
+  geom_hline(yintercept = 0)+
+  labs(title = "axis correlation with pupil dilation during anticipation",
+       subtitle = "angle is between axis and valence")+
+  scale_color_manual(values = c("orange","blue"))
+
+a1gain <- lmer_out1[which.max(abs(lmer_out1gain[,1])),]
+a1loss <- lmer_out1[nrow(lmer_out1gain) + which.max(abs(lmer_out1loss[,1])),]
+```
+
+```{r}
+data_lm_outcome$reaction_outcome <- relevel(data_lm_outcome$reaction_outcome, ref = "Hit")
+
+lmer_out2gain <- {}
+lmer_out2loss <- {}
+
+for (i in 1:nrow(angles)){
+  angle_info = angles[i,]
+  data_lm_out_temp <- data_lm_outcome%>%
+    mutate(axis1 = valence_scaled * angle_info$cos1 + arousal_scaled * angle_info$sin1,
+           axis2 = valence_scaled * angle_info$cos2 + arousal_scaled * angle_info$sin2)
+  
+  data_lm_out_temp$gain_or_loss <- factor(data_lm_out_temp$gain_or_loss, levels = c("gain","loss"))
+  sum_temp1 <- summary(lmer(scale(axis1) ~ scale(mean_pupil_nobc) * gain_or_loss * reaction_outcome + (1|Subject) + (1|condition),
+              data_lm_out_temp))
+  sum_temp2 <- summary(lmer(scale(axis2) ~ scale(mean_pupil_nobc) * gain_or_loss * reaction_outcome + (1|Subject) + (1|condition),
+              data_lm_out_temp))
+  lmer_out2gain <- rbind(lmer_out2gain, sum_temp1$coefficients[2,],sum_temp2$coefficients[2,])
+  
+  data_lm_out_temp$gain_or_loss <- factor(data_lm_out_temp$gain_or_loss, levels = c("loss","gain"))
+  sum_temp1 <- summary(lmer(scale(axis1) ~ scale(mean_pupil_nobc) * gain_or_loss * reaction_outcome + (1|Subject) + (1|condition),
+              data_lm_out_temp))
+  sum_temp2 <- summary(lmer(scale(axis2) ~ scale(mean_pupil_nobc) * gain_or_loss * reaction_outcome + (1|Subject) + (1|condition),
+              data_lm_out_temp))
+  lmer_out2loss <- rbind(lmer_out2loss, sum_temp1$coefficients[2,],sum_temp2$coefficients[2,])
+}
+
+lmer_out2 <- as.data.frame(rbind(lmer_out2gain,lmer_out2loss))
+lmer_out2$axis = rep(c("axis1","axis2"),nrow(angles)*2)
+lmer_out2$gain_or_loss = c(rep("gain",nrow(angles)*2),rep("loss",nrow(angles)*2))
+
+lmer_out2[seq(1,nrow(angles)*4,by = 2),"angle"] = angles$angle1d
+lmer_out2[seq(2,nrow(angles)*4,by = 2),"angle"] = angles$angle2d
+
+lmer_out2$p_val <- (lmer_out2$`Pr(>|t|)` < 0.05)
+
+ggplot(lmer_out2, aes(x = angle,
+                     y = Estimate))+
+  geom_point(aes(alpha = p_val,
+                 color = gain_or_loss,))+
+  facet_wrap(~axis)+
+  geom_hline(yintercept = 0)+
+  labs(title = "axis correlation with pupil dilation during Hit outcome",
+       subtitle = "angle is between axis and valence")+
+  scale_color_manual(values = c("orange","blue"))
+
+a2gain <- lmer_out2[which.max(abs(lmer_out2gain[,1])),]
+a2loss <- lmer_out2[nrow(lmer_out2gain) + which.max(abs(lmer_out2loss[,1])),]
+```
+
+
+
+```{r}
+data_lm_outcome$reaction_outcome <- relevel(data_lm_outcome$reaction_outcome, ref = "Miss")
+
+lmer_out3gain <- {}
+lmer_out3loss <- {}
+
+for (i in 1:nrow(angles)){
+  angle_info = angles[i,]
+  data_lm_out_temp <- data_lm_outcome%>%
+    mutate(axis1 = valence_scaled * angle_info$cos1 + arousal_scaled * angle_info$sin1,
+           axis2 = valence_scaled * angle_info$cos2 + arousal_scaled * angle_info$sin2)
+  
+  data_lm_out_temp$gain_or_loss <- factor(data_lm_out_temp$gain_or_loss, levels = c("gain","loss"))
+  sum_temp1 <- summary(lmer(scale(axis1) ~ scale(mean_pupil_nobc) * gain_or_loss * reaction_outcome + (1|Subject) + (1|condition),
+              data_lm_out_temp))
+  sum_temp2 <- summary(lmer(scale(axis2) ~ scale(mean_pupil_nobc) * gain_or_loss * reaction_outcome + (1|Subject) + (1|condition),
+              data_lm_out_temp))
+  lmer_out3gain <- rbind(lmer_out3gain, sum_temp1$coefficients[2,],sum_temp2$coefficients[2,])
+  
+  data_lm_out_temp$gain_or_loss <- factor(data_lm_out_temp$gain_or_loss, levels = c("loss","gain"))
+  sum_temp1 <- summary(lmer(scale(axis1) ~ scale(mean_pupil_nobc) * gain_or_loss * reaction_outcome + (1|Subject) + (1|condition),
+              data_lm_out_temp))
+  sum_temp2 <- summary(lmer(scale(axis2) ~ scale(mean_pupil_nobc) * gain_or_loss * reaction_outcome + (1|Subject) + (1|condition),
+              data_lm_out_temp))
+  lmer_out3loss <- rbind(lmer_out3loss, sum_temp1$coefficients[2,],sum_temp2$coefficients[2,])
+}
+
+lmer_out3 <- as.data.frame(rbind(lmer_out3gain,lmer_out3loss))
+lmer_out3$axis = rep(c("axis1","axis2"),nrow(angles)*2)
+lmer_out3$gain_or_loss = c(rep("gain",nrow(angles)*2),rep("loss",nrow(angles)*2))
+
+lmer_out3[seq(1,nrow(angles)*4,by = 2),"angle"] = angles$angle1d
+lmer_out3[seq(2,nrow(angles)*4,by = 2),"angle"] = angles$angle2d
+
+lmer_out3$p_val <- (lmer_out3$`Pr(>|t|)` < 0.05)
+
+ggplot(lmer_out3, aes(x = angle,
+                     y = Estimate))+
+  geom_point(aes(alpha = p_val,
+                 color = gain_or_loss,))+
+  facet_wrap(~axis)+
+  geom_hline(yintercept = 0)+
+  labs(title = "axis correlation with pupil dilation during Miss outcome",
+       subtitle = "angle is between axis and valence")+
+  scale_color_manual(values = c("orange","blue"))
+
+a3gain <- lmer_out3[which.max(abs(lmer_out3gain[,1])),]
+a3loss <- lmer_out3[nrow(lmer_out3gain) + which.max(abs(lmer_out3loss[,1])),]
+```
+
+```{r}
+df_axes_gl <- rbind(a1gain,a1loss,a2gain,a2loss,a3gain,a3loss)
+df_axes_gl$condition <- c("anti","anti","out-hit","out-hit","out-miss","out-miss")
+df_axes_gl$domain <- rep(c("gain","loss"),3)
+
+df_axes_gl <- df_axes_gl%>%
+  mutate(rad = angle/180 *pi,
+         cos = cos(rad),
+         sin = sin(rad))
+
+ggplot(df_axes_gl%>%
+         mutate(cos = cos * abs(Estimate),
+                sin = sin * abs(Estimate)))+
+  geom_segment(aes(x = 0,y = 0,
+                   xend = cos, yend = sin,
+                   color = condition,
+                   linetype = domain),
+               size = 1, alpha = 0.5,arrow = arrow(length = unit(0.03, "npc")))+
+  scale_color_manual(values = c("gold","violet","purple"))+
+  geom_segment(aes(x = -1, y = 0,
+                   xend = 1, yend = 0),
+               size = 0.5, arrow = arrow(length = unit(0.03, "npc")),
+               color = "black")+
+  geom_segment(aes(x = 0, y = 0,
+                   xend = 0, yend = 0.5),
+               size = 0.5, arrow = arrow(length = unit(0.03, "npc")),
+               color = "black")+
+    geom_segment(aes(x = 0, y = 0,
+                   xend = 0.5, yend = 0.5),
+               size = 0.5, linetype = "dashed",
+               color = "black")+
+    geom_segment(aes(x = 0, y = 0,
+                   xend = -0.5, yend = 0.5),
+               size = 0.5, linetype = "dashed",
+               color = "black")+
+  scale_color_manual(values = c("gold","violet","purple"))+
+  xlim(-1,1)+
+  ylim(0,0.5)+
+  labs(x = "valence",
+       y = "arousal",
+       title = "Association of self-report with pupil size (not baseline corrected)",
+       subtitle = "Numbers are standardised regression coefficients")+
+  geom_segment(data = df_axes%>%
+         mutate(cos = cos * abs(Estimate),
+                sin = sin * abs(Estimate)),
+         aes(x = 0,y = 0,
+                   xend = cos, yend = sin,
+                   color = condition),
+               size = 1.5, arrow = arrow(length = unit(0.03, "npc")))
+```
