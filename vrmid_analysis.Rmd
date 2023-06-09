@@ -5,16 +5,7 @@ output: html_document
 
 # note to self: ITI denotes time after trial ends
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
-library(dplyr)
-library(tidyverse)
-library(lme4)
-library(ggplot2)
-library(lmerTest)
-library(sjPlot)
-library(patchwork)
-library(zoo)
-library(chron)
+source(here::here("load_libraries.R"))
 theme_set(theme_bw() + #set the theme 
             theme(text = element_text(family = "Helvetica",size = 12))) #set the default text size
 purpleOrange_palette6 = c("purple4","purple2","plum3","gold","orange","goldenrod")

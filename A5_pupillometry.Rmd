@@ -184,7 +184,7 @@ p_ant <- ggplot(data_pupil_summary_anticipation%>%
 data_pupil_summary_anticipation <- data_pupil%>%
   ungroup()%>%
   filter(probe == "anti")%>%
-  group_by(condition,trial_type,sample_in_trial_t)%>%
+  group_by(condition,sample_in_trial_t)%>%
   summarise(mean = mean(pupil_Avg_bc_scale, na.rm = T),
             lower = mean(pupil_Avg_bc_scale, na.rm = T) - qt(0.975, df = n() - 1) * sd(pupil_Avg_bc_scale, na.rm = T) / sqrt(n()),
             upper = mean(pupil_Avg_bc_scale, na.rm = T) + qt(0.975, df = n() - 1) * sd(pupil_Avg_bc_scale, na.rm = T) / sqrt(n()))
@@ -197,7 +197,6 @@ ggplot(data_pupil_summary_anticipation%>%
                   ymin = lower, 
                   ymax = upper, fill = condition), 
               alpha = 0.2)+
-  facet_wrap(~trial_type)+
   scale_color_manual(values = purpleOrange_palette6)+
   scale_fill_manual(values = purpleOrange_palette6)+
   annotate("rect", xmin =0.1, xmax = 4, ymin = -3, ymax = 1.5,
@@ -415,24 +414,12 @@ anova(modAV)
 ```
 #A1: Yes, Greater pupil dilation during anticipation for high gain trials (+$5) compared to low gain trials (+$0)
 ```{r}
-t.test(ind_pupil_ant$mean_pupil[ind_pupil_ant$trial_type == "+$5"],
-       ind_pupil_ant$mean_pupil[ind_pupil_ant$trial_type == "+$0"],
-       paired = T)
-effectsize::cohens_d(ind_pupil_ant$mean_pupil[ind_pupil_ant$trial_type == "+$5"],
-       ind_pupil_ant$mean_pupil[ind_pupil_ant$trial_type == "+$0"],
-       paired = T)
+modA
+lsmeans(modA,pairwise~trial_type)
 ```
 
 # A2: Yes, Greater pupil dilation during anticipation for high gain trials (+$5) compared to low gain trials (+$0)
-```{r}
-t.test(ind_pupil_ant$mean_pupil[ind_pupil_ant$trial_type == "-$5"],
-       ind_pupil_ant$mean_pupil[ind_pupil_ant$trial_type == "-$0"],
-       paired = T)
-effectsize::cohens_d(ind_pupil_ant$mean_pupil[ind_pupil_ant$trial_type == "-$5"],
-       ind_pupil_ant$mean_pupil[ind_pupil_ant$trial_type == "-$0"],
-       paired = T)
 
-```
 
 # B1: No
 # B2: No
@@ -579,21 +566,6 @@ data_lm_anti <- data_lm_anti%>%
     "-"
   ))
 
-lme7b <- brm(PosA_scaled ~ mean_pupil_bc_ant * trial_type_binary + (1|Subject) + (1|condition),
-              data_lm_anti)
-summary(lme7b)
-p_map(lme7b)
-plot_model(lme7b, type = "pred", terms = c("mean_pupil_bc_ant","trial_type_binary"),
-           show.data = T)+
-  labs(title = "Anticipation Pos Arous")
-
-lme8b <- brm(NegA_scaled ~ mean_pupil_bc_ant * trial_type_binary + (1|Subject) + (1|condition),
-              data_lm_anti)
-summary(lme8b)
-p_map(lme8b)
-plot_model(lme8b, type = "pred", terms = c("mean_pupil_bc_ant","trial_type_binary"),
-           show.data = T)+
-  labs(title = "Anticipation Neg Arous")
 ```
 
 # outcome hit and miss
@@ -654,11 +626,17 @@ anova(modOA)
 modOV <- lmer(valence_scaled ~ trial_type * reaction_outcome + (1|Subject) + (1|condition),data_lm_outcome)
 anova(modOV)
 ```
+```{r}
+modO
+lsmeans(modO,pairwise~trial_type)
+```
 
 ```{r}
 summary(lmer(mean_pupil_bc ~ reaction_outcome + (1|Subject),ind_pupil_out))
 
 ```
+
+
 
 ```{r}
 theme_set(theme_bw() + #set the theme 
@@ -686,17 +664,15 @@ data_pupil_C <- data_pupil%>%
   group_by(Subject,trial,reaction_outcome,probe,trial_type,condition)%>%
   summarise(mean_pupil_bc = mean(pupil_Avg_bc_scale, na.rm = T))
 
-lmeC1 <- brm(mean_pupil_bc ~ reaction_outcome + (1|Subject) + (1|condition),
+lmeC1 <- lmer(mean_pupil_bc ~ reaction_outcome + (1|Subject) + (1|condition),
               data_pupil_C%>%
                 filter(trial_type == "+$5"))
 summary(lmeC1)
-p_map(lmeC1)
 
-lmeC2 <- brm(mean_pupil_bc ~ reaction_outcome + (1|Subject) + (1|condition),
+lmeC2 <- lmer(mean_pupil_bc ~ reaction_outcome + (1|Subject) + (1|condition),
               data_pupil_C%>%
                 filter(trial_type == "-$5"))
 summary(lmeC2)
-p_map(lmeC2)
 ```
 
 ```{r}
@@ -817,20 +793,23 @@ anova(t,p,tp)
 r.squaredGLMM(t)
 r.squaredGLMM(p)
 r.squaredGLMM(tp)
+EMAtools::lme.dscore(tp,da,"lme4")
 ```
 ```{r}
 do <- data_lm_outcome%>%
   filter(!is.na(mean_pupil_baseline_out), !is.na(mean_pupil_bc_out))
-t <- lmer(arousal_scaled ~  mean_pupil_baseline_out + reaction_outcome + (1|Subject) + (1|condition),
+t <- lmer(scale(arousal_scaled) ~  scale(mean_pupil_baseline_out) + (1|Subject) + (1|condition),
               do)
-p <-lmer(arousal_scaled ~  mean_pupil_bc_out * reaction_outcome+ (1|Subject) + (1|condition),
+p <-lmer(arousal_scaled ~  mean_pupil_bc_out + (1|Subject) + (1|condition),
               do)
-tp <- lmer(arousal_scaled ~  mean_pupil_nobc_out * reaction_outcome + (1|Subject) + (1|condition),
+tp <- lmer(arousal_scaled ~  mean_pupil_nobc_out + (1|Subject) + (1|condition),
               do)
 anova(t,p,tp)
 r.squaredGLMM(t)
 r.squaredGLMM(p)
 r.squaredGLMM(tp)
+EMAtools::lme.dscore(t,do,"lme4")
+EMAtools::lme.dscore(tp,do,"lme4")
 ```
 
 #tonic activity
@@ -839,6 +818,7 @@ r.squaredGLMM(tp)
 lme13 <- lmer(scale(arousal_scaled) ~  scale(mean_pupil_baseline_ant) + scale(mean_pupil_bc_ant) + (1|Subject) + (1|condition),
               da)
 summary(lme13)
+EMAtools::lme.dscore(summary(lme13), da, "lme4")
 p7a <- plot_model(lme13, type = "pred", terms = c("mean_pupil_baseline_ant"),
            show.data = T, dot.size = 0.5)+
   labs(title = "Anticipation arousal",
@@ -859,6 +839,7 @@ p7b <- plot_model(lme14, type = "pred", terms = c("mean_pupil_baseline_ant"),
 lme15 <- lmer(scale(arousal_scaled) ~  scale(mean_pupil_baseline_ant) +  scale(mean_pupil_bc_out) + scale(mean_pupil_bc_ant) + (1|Subject) + (1|condition),
               do)
 summary(lme15)
+EMAtools::lme.dscore(lme15,do,"lme4")
 
 p8a <- plot_model(lme15, type = "pred", terms = c("mean_pupil_baseline_ant"),
            show.data = T, dot.size = 0.5)+
@@ -913,13 +894,35 @@ pt2 <- ggplot(data_pupil_tonic)+
   labs(y = "mean tonic pupil dilation",
        title = "First vs. second half")
 
-m1 <- lmer(pupil_Avg_baseline ~ half + (1|Subject),data_pupil_tonic)
+m1 <- lmer(scale(pupil_Avg_baseline) ~ half + (1|Subject),data_pupil_tonic)
 summary(m1)
 
 plot_model(m1, type = "pred", terms = "half")
 
 pt1+pt2+
   plot_layout(width = c(2,1))
+
+#phasic for comparison
+data_lm_beh <- full_join(data_lm_anti,data_lm_outcome)
+data_lm_beh <- data_lm_beh%>%
+  mutate(trial_type_num = as.numeric(gsub("[^0-9.-]", "", trial_type)),
+         trialgain = ifelse(trial_type_num >= 0,
+                            ifelse(reaction_outcome == "Hit",
+                                   trial_type_num,
+                                   0),
+                            ifelse(reaction_outcome == "Miss",
+                                   trial_type_num,
+                                   0)))
+
+data_lm_beh <- data_lm_beh%>%
+  mutate(half = ifelse(trial >= 48,"second","first"))
+m2 <- lmer(scale(mean_pupil_bc_ant) ~ half + (1|Subject) + (1|probe),data_lm_beh)
+summary(m2)
+EMAtools::lme.dscore(m2,data_lm_beh,"lme4")
+
+m3 <- lmer(scale(mean_pupil_bc_out) ~ half + (1|Subject) + (1|probe),data_lm_beh)
+summary(m3)
+EMAtools::lme.dscore(m3,data_lm_beh,"lme4")
 ```
 
 ## carryover: previous trials' affect and baseline pupil
@@ -994,6 +997,87 @@ pt3 <- ggplot(df_integration%>%
   annotate("text",y = 2.4, x = 10, label = "t = 2.096")
 
 summary(lmer(scale(pupil_Avg_baseline) ~ scale(arousal_past1) + scale(arousal_past2)+ scale(arousal_past3)+ scale(arousal_past4)+ scale(arousal_past5)+ scale(arousal_past6)+ scale(arousal_past7)+ scale(arousal_past8)+ scale(arousal_past9)+ scale(arousal_past10) + (1|Subject) + (1|condition) ,data_pupil_tonic_carryover))
+```
+### phasic control
+```{r}
+data_pupil_phasic <- unique(data_pupil%>%
+  filter(Time_sec >= 5.5 & Time_sec <= 7.5)%>%
+  select(Subject,probe,trial,pupil_Avg_bc_scale,
+         arousal_scaled,valence_scaled,reaction_outcome,
+         condition))%>%
+  group_by(Subject,trial,arousal_scaled,valence_scaled,reaction_outcome,condition)%>%
+  summarise(pupil_Avg_phasic = as.numeric(mean(pupil_Avg_bc_scale,na.rm = T)))%>%
+  mutate(half = ifelse(trial >= 48,"second","first"))
+
+data_pupil_phasic_carryover <- data_pupil_phasic%>%
+  group_by(Subject)%>%
+  mutate(arousal_past0 = arousal_scaled,
+        arousal_past1 = lag(arousal_scaled,1),
+         arousal_past2 = lag(arousal_scaled,2),
+         arousal_past3 = lag(arousal_scaled,3),
+         arousal_past4 = lag(arousal_scaled,4),
+         arousal_past5 = lag(arousal_scaled,5),
+         arousal_past6 = lag(arousal_scaled,6),
+         arousal_past7 = lag(arousal_scaled,7),
+         arousal_past8 = lag(arousal_scaled,8),
+         arousal_past9 = lag(arousal_scaled,9),
+         arousal_past10 = lag(arousal_scaled,10),
+         arousal_past11 = lag(arousal_scaled,11),
+         arousal_past12 = lag(arousal_scaled,12),
+         arousal_past13 = lag(arousal_scaled,13),
+         arousal_past14 = lag(arousal_scaled,14),
+         arousal_past15 = lag(arousal_scaled,15),
+         arousal_past16 = lag(arousal_scaled,16),
+         arousal_past17 = lag(arousal_scaled,17),
+         arousal_past18 = lag(arousal_scaled,18),
+         arousal_past19 = lag(arousal_scaled,19),
+         arousal_past20 = lag(arousal_scaled,20),
+         arousal_past21 = lag(arousal_scaled,21),
+         arousal_past22 = lag(arousal_scaled,22),
+         arousal_past23 = lag(arousal_scaled,23),
+         arousal_past24 = lag(arousal_scaled,24),
+         arousal_past25 = lag(arousal_scaled,25),
+         arousal_past26 = lag(arousal_scaled,26),
+         arousal_past27 = lag(arousal_scaled,27),
+         arousal_past28 = lag(arousal_scaled,28),
+         arousal_past29 = lag(arousal_scaled,29),
+         arousal_past30 = lag(arousal_scaled,30),
+         arousal_past31 = lag(arousal_scaled,31),
+         arousal_past32 = lag(arousal_scaled,32),
+         arousal_past33 = lag(arousal_scaled,33),
+         arousal_past34 = lag(arousal_scaled,34),
+         arousal_past35 = lag(arousal_scaled,35),
+         arousal_past36 = lag(arousal_scaled,36),
+         arousal_past37 = lag(arousal_scaled,37),
+         arousal_past38 = lag(arousal_scaled,38),
+         arousal_past39 = lag(arousal_scaled,39),
+         arousal_past40 = lag(arousal_scaled,40))
+
+df_integration <- {}
+for (i in 0:40){
+  print(i)
+    my.f <- as.formula(paste0("scale(pupil_Avg_phasic) ~ scale(arousal_past",i, ") + (1|Subject) + (1|condition)"))
+  dft <- as.data.frame(t(summary(lmer(my.f,data_pupil_phasic_carryover))$coefficients[2,]))
+  dft$term = paste0("arousal")
+  dft$past = i
+  df_integration <- rbind(df_integration,dft)
+  
+  #   my.f <- as.formula(paste0("scale(pupil_Avg_baseline) ~ scale(valence_past",i, ") + (1|Subject)"))
+  # dft <- as.data.frame(t(summary(lmer(my.f,data_pupil_tonic_carryover))$coefficients[2,]))
+  # dft$term = paste0("valence")
+  # dft$past = i
+  # df_integration <- rbind(df_integration,dft)
+}
+
+ggplot(df_integration%>%
+         filter(term == "arousal"), aes(x = past, y = `t value`))+
+  geom_line()+
+  scale_x_reverse()+
+  labs(x = "Number of trials past",
+       title = "Phasic pupil ~ previous arousal ratings")+
+  geom_hline(yintercept = 0, linetype = "dashed")+
+  geom_hline(yintercept = 2.096, linetype = "dashed", color = "grey")+
+  annotate("text",y = 2.4, x = 10, label = "t = 2.096")
 ```
 
 
@@ -1107,18 +1191,6 @@ pt1+pt2+pt3+pt4+
 ```
 # parametric modulation
 ```{r}
-data_lm_beh <- full_join(data_lm_anti,data_lm_outcome)
-data_lm_beh <- data_lm_beh%>%
-  mutate(trial_type_num = as.numeric(gsub("[^0-9.-]", "", trial_type)),
-         trialgain = ifelse(trial_type_num >= 0,
-                            ifelse(reaction_outcome == "Hit",
-                                   trial_type_num,
-                                   0),
-                            ifelse(reaction_outcome == "Miss",
-                                   trial_type_num,
-                                   0)))
-
-
 l_pm <- lmer(scale(trialgain) ~ scale(mean_pupil_bc_ant) + (1|Subject) + (1|condition) + (1|probe),data_lm_beh)
 summary(l_pm)
 EMAtools::lme.dscore(l_pm, data_lm_beh, type = "lme4")

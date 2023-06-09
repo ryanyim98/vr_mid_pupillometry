@@ -112,6 +112,10 @@ lme2 <- lmer(scale(arousal_scaled) ~ scale(valence_scaled) +
                (1|Subject),data_lm_outcome%>%
                filter(reaction_outcome == "Miss"))
 summary(lme2)
+
+lme3 <- lmer(scale(arousal_scaled) ~ scale(valence_scaled)+ scale(I(valence_scaled^2))+
+               (1|Subject),data_lm_outcome)
+summary(lme3)
 ```
 
 ```{r}
@@ -148,7 +152,7 @@ p4 <-  plot_model(modOV, type = "pred", terms = c("trial_type","reaction_outcome
         x = "incentive value")+
   geom_line()+
   scale_color_bluebrown_d()+
-  theme(legend.position = "none")
+  theme(legend.position = "right")
 
 (p1+p2+p3+p4) +
   plot_layout(nrow = 1)+
